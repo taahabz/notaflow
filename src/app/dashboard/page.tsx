@@ -138,8 +138,8 @@ export default function Dashboard() {
           url: publicUrl,
           name: selectedFile.name,
           path: filePath,
-          original_size: selectedFile.size,
-          compressed_size: compressedFile.size,
+          // original_size: selectedFile.size,
+          // compressed_size: compressedFile.size,
         });
 
       if (dbError) {
