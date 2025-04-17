@@ -10,7 +10,6 @@ const nextConfig = {
     },
     // Other Next.js settings
     reactStrictMode: true,
-    swcMinify: true,
   }
   
   module.exports = nextConfig
