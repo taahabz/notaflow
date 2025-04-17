@@ -6,7 +6,61 @@ import { supabase } from '@/lib/supabaseClient';
 import { motion } from 'framer-motion';
 import { FiLogOut, FiUpload, FiImage, FiTrash2 } from 'react-icons/fi';
 import Image from 'next/image';
+async function compressImage(file: File): Promise<File> {
+  // Only compress if the image is larger than 500KB
+  if (file.size <= 500 * 1024) {
+    return file;
+  }
 
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    
+    reader.onerror = () => {
+      reader.abort();
+      reject(new Error("Failed to read the file"));
+    };
+
+    reader.readAsDataURL(file);
+    reader.onload = (event) => {
+      const img = new window.Image();
+      
+      img.onerror = () => {
+        resolve(file); // Fallback to original if image fails to load
+      };
+
+      img.src = event.target?.result as string;
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const ctx = canvas.getContext('2d');
+        
+        if (!ctx) {
+          resolve(file);
+          return;
+        }
+
+        // Calculate new dimensions (reduce by half)
+        const width = img.width * 0.5;
+        const height = img.height * 0.5;
+        
+        canvas.width = width;
+        canvas.height = height;
+        
+        ctx.drawImage(img, 0, 0, width, height);
+        canvas.toBlob((blob) => {
+          if (blob) {
+            const compressedFile = new File([blob], file.name, {
+              type: file.type,
+              lastModified: Date.now(),
+            });
+            resolve(compressedFile);
+          } else {
+            resolve(file);
+          }
+        }, file.type, 0.7); // 0.7 quality (70%)
+      };
+    };
+  });
+}
 export default function Dashboard() {
   const router = useRouter();
   const [images, setImages] = useState<any[]>([]);
@@ -52,47 +106,56 @@ export default function Dashboard() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    // Generate unique filename
-    const fileExt = selectedFile.name.split('.').pop();
-    const fileName = `${Math.random()}.${fileExt}`;
-    const filePath = `${user.id}/${fileName}`;
+    try {
+      // Compress the image before upload (reduce by half)
+      const compressedFile = await compressImage(selectedFile);
 
-    // Upload to storage
-    const { error: uploadError } = await supabase.storage
-      .from('user-images')
-      .upload(filePath, selectedFile);
+      // Generate unique filename
+      const fileExt = selectedFile.name.split('.').pop();
+      const fileName = `${Math.random()}.${fileExt}`;
+      const filePath = `${user.id}/${fileName}`;
 
-    if (uploadError) {
-      console.error('Upload error:', uploadError);
+      // Upload to storage
+      const { error: uploadError } = await supabase.storage
+        .from('user-images')
+        .upload(filePath, compressedFile);
+
+      if (uploadError) {
+        console.error('Upload error:', uploadError);
+        return;
+      }
+
+      // Get public URL
+      const { data: { publicUrl } } = supabase.storage
+        .from('user-images')
+        .getPublicUrl(filePath);
+
+      // Save to database
+      const { error: dbError } = await supabase
+        .from('images')
+        .insert({
+          user_id: user.id,
+          url: publicUrl,
+          name: selectedFile.name,
+          path: filePath,
+          original_size: selectedFile.size,
+          compressed_size: compressedFile.size,
+        });
+
+      if (dbError) {
+        console.log('Database error:', dbError);
+      } else {
+        await fetchImages();
+      }
+    } catch (error) {
+      console.error('Error during upload:', error);
+    } finally {
       setUploading(false);
-      return;
+      setSelectedFile(null);
     }
-
-    // Get public URL
-    const { data: { publicUrl } } = supabase.storage
-      .from('user-images')
-      .getPublicUrl(filePath);
-
-    // Save to database
-    const { error: dbError } = await supabase
-      .from('images')
-      .insert({
-        user_id: user.id,
-        url: publicUrl,
-        name: selectedFile.name,
-        path: filePath
-      });
-
-    if (dbError) {
-      console.error('Database error:', dbError);
-    } else {
-      await fetchImages();
-    }
-
-    setUploading(false);
-    setSelectedFile(null);
   };
 
+  // ... rest of your component code remains the same ...
   const handleDelete = async (imageId: string, imagePath: string) => {
     // Delete from storage
     const { error: storageError } = await supabase.storage
