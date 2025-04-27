@@ -122,6 +122,7 @@ const RichTextEditor = ({
         <button onClick={handleLink} className="p-2 rounded hover:bg-[rgb(var(--secondary-hover))]">
           <FiLink />
         </button>
+        
       </div>
       
       {/* Editable Content */}
@@ -1227,6 +1228,7 @@ export default function NotesApp() {
         </nav>
       </div>
       
+      
       {/* Image Uploader Modal */}
       <AnimatePresence>
         {showImageUploader && (
@@ -1344,5 +1346,7 @@ export default function NotesApp() {
         )}
       </AnimatePresence>
     </div>
+
+    
   );
 }
