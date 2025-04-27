@@ -1,17 +1,77 @@
+/* global.css */
 @import "tailwindcss";
+
+:root {
+  --background: 255 255 255;
+  --foreground: 0 0 0;
+  --border: 229 229 229;
+  --accent: 255 210 10;
+  --accent-hover: 240 195 0;
+  --secondary: 240 240 245;
+  --secondary-hover: 230 230 235;
+}
+
+.dark {
+  --background: 0 0 0;
+  --foreground: 255 255 255;
+  --border: 38 38 38;
+  --accent: 255 210 10;
+  --accent-hover: 240 195 0;
+  --secondary: 30 30 30;
+  --secondary-hover: 45 45 45;
+}
+
+.theme-blue {
+  --background: 250 253 255;
+  --foreground: 0 40 80;
+  --border: 220 235 245;
+  --accent: 0 125 250;
+  --accent-hover: 0 110 225;
+  --secondary: 230 245 255;
+  --secondary-hover: 215 235 250;
+}
+
+.theme-green {
+  --background: 250 255 252;
+  --foreground: 5 80 35;
+  --border: 230 245 235;
+  --accent: 40 180 90;
+  --accent-hover: 35 165 80;
+  --secondary: 235 255 240;
+  --secondary-hover: 220 245 225;
+}
+
+.theme-purple {
+  --background: 252 250 255;
+  --foreground: 80 30 100;
+  --border: 240 230 250;
+  --accent: 140 85 250;
+  --accent-hover: 130 75 240;
+  --secondary: 245 237 255;
+  --secondary-hover: 240 230 250;
+}
+
+.theme-pink {
+  --background: 255 250 252;
+  --foreground: 100 30 60;
+  --border: 250 230 240;
+  --accent: 250 85 140;
+  --accent-hover: 240 75 130;
+  --secondary: 255 240 245;
+  --secondary-hover: 250 230 240;
+}
+
+.theme-orange {
+  --background: 255 252 250;
+  --foreground: 90 50 10;
+  --border: 245 235 225;
+  --accent: 250 150 50;
+  --accent-hover: 240 140 40;
+  --secondary: 255 245 235;
+  --secondary-hover: 250 235 220;
+}
+
 @layer base {
-  :root {
-    --background: 255 255 255;
-    --foreground: 0 0 0;
-    --border: 229 229 229;
-  }
-
-  .dark {
-    --background: 0 0 0;
-    --foreground: 255 255 255;
-    --border: 38 38 38;
-  }
-
   * {
     border-color: rgb(var(--border));
   }
@@ -21,16 +81,105 @@
     color: rgb(var(--foreground));
   }
 }
-@layer utilities {
-  .bg-background {
-    background-color: rgb(var(--background));
-  }
 
-  .text-foreground {
-    color: black; /* Changed to black */
-  }
+/* Quill Editor Theme Integration */
+.quill {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
 
-  .border-border {
-    border-color: rgb(var(--border));
+.ql-container {
+  flex-grow: 1;
+  font-family: inherit;
+  font-size: 1rem;
+  overflow: auto;
+}
+
+.ql-toolbar {
+  border-color: rgb(var(--border)) !important;
+  background-color: rgb(var(--secondary)) !important;
+  border-radius: 0.5rem 0.5rem 0 0;
+}
+
+.ql-container {
+  border-color: rgb(var(--border)) !important;
+  background-color: rgb(var(--background)) !important;
+  color: rgb(var(--foreground)) !important;
+  border-radius: 0 0 0.5rem 0.5rem;
+}
+
+/* Custom styling for toolbar buttons */
+.ql-toolbar button,
+.ql-toolbar .ql-picker {
+  color: rgb(var(--foreground)) !important;
+}
+
+.ql-toolbar button:hover,
+.ql-toolbar button.ql-active,
+.ql-toolbar .ql-picker-label:hover,
+.ql-toolbar .ql-picker-label.ql-active,
+.ql-toolbar .ql-picker-item:hover,
+.ql-toolbar .ql-picker-item.ql-selected {
+  color: rgb(var(--accent)) !important;
+}
+
+.ql-toolbar button:hover .ql-stroke,
+.ql-toolbar button.ql-active .ql-stroke,
+.ql-toolbar .ql-picker-label:hover .ql-stroke,
+.ql-toolbar .ql-picker-label.ql-active .ql-stroke,
+.ql-toolbar .ql-picker-item:hover .ql-stroke,
+.ql-toolbar .ql-picker-item.ql-selected .ql-stroke,
+.ql-toolbar button:hover .ql-fill,
+.ql-toolbar button.ql-active .ql-fill,
+.ql-toolbar .ql-picker-label:hover .ql-fill,
+.ql-toolbar .ql-picker-label.ql-active .ql-fill,
+.ql-toolbar .ql-picker-item:hover .ql-fill,
+.ql-toolbar .ql-picker-item.ql-selected .ql-fill,
+.ql-toolbar button:hover .ql-picker-label,
+.ql-toolbar button.ql-active .ql-picker-label,
+.ql-toolbar .ql-picker-label:hover .ql-picker-label,
+.ql-toolbar .ql-picker-label.ql-active .ql-picker-label,
+.ql-toolbar .ql-picker-item:hover .ql-picker-label,
+.ql-toolbar .ql-picker-item.ql-selected .ql-picker-label {
+  color: rgb(var(--accent)) !important;
+  stroke: rgb(var(--accent)) !important;
+}
+
+/* Dark mode overrides for editor */
+.dark .ql-snow .ql-stroke {
+  stroke: rgb(var(--foreground)) !important;
+}
+
+.dark .ql-snow .ql-fill,
+.dark .ql-snow .ql-stroke.ql-fill {
+  fill: rgb(var(--foreground)) !important;
+}
+
+.dark .ql-snow .ql-picker {
+  color: rgb(var(--foreground)) !important;
+}
+
+.dark .ql-snow .ql-picker-options {
+  background-color: rgb(var(--secondary)) !important;
+  border-color: rgb(var(--border)) !important;
+}
+
+/* Apple-like smooth scrolling */
+html {
+  scroll-behavior: smooth;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
   }
+}
+
+/* ContentEditable Placeholder */
+[contenteditable="true"]:empty:before {
+  content: attr(data-placeholder);
+  color: rgb(var(--foreground));
+  opacity: 0.4;
+  cursor: text;
 }

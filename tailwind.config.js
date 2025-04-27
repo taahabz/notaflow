@@ -1,16 +1,16 @@
-module.exports = {
+export default {
   darkMode: 'class',
   content: [
-    './src/**/*.{js,ts,jsx,tsx}',
+    // your content paths
   ],
   theme: {
     extend: {
       colors: {
         background: 'rgb(var(--background))',
         foreground: 'rgb(var(--foreground))',
-        border: 'rgb(var(--border))',
-      },
-    },
+        border: 'rgb(var(--border))'
+      }
+    }
   },
   plugins: [],
 }
