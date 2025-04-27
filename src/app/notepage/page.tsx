@@ -26,6 +26,7 @@ import {
 } from 'react-icons/fi';
 import { useThemeContext, ThemeType } from '@/contexts/ThemeContext';
 import ImageUploader from './components/ImageUploader';
+import AvatarUploader from './components/AvatarUploader';
 import { Theme } from '@/types/theme';
 
 // Custom Editor Component with proper types
@@ -165,13 +166,8 @@ export default function NotesApp() {
     theme: Theme.LIGHT 
   });
   
-  // Reference to the current active editor element
-  const currentEditorElement = useRef<HTMLElement | null>(null);
-
-  // Update the current editor element when the editor rendered
-  const updateEditorRef = (element: HTMLElement | null) => {
-    currentEditorElement.current = element;
-  };
+  // Reference to the current active editor element for image insertion
+  const editorRef = useRef<HTMLDivElement | null>(null);
 
   const { theme, setTheme } = useThemeContext()
   
@@ -186,10 +182,234 @@ export default function NotesApp() {
   ]
 
   const [showImageUploader, setShowImageUploader] = useState(false);
+  const [showAvatarUploader, setShowAvatarUploader] = useState(false);
   const [showMobileMenu, setShowMobileMenu] = useState(false);
+
+  // Encryption key handling
+  const [encryptionKey, setEncryptionKey] = useState<string | null>(null);
+  
+  // Function to generate a secure encryption key
+  const generateEncryptionKey = () => {
+    const array = new Uint8Array(32); // 256 bits
+    window.crypto.getRandomValues(array);
+    // Convert to hex string for storage
+    return Array.from(array, byte => byte.toString(16).padStart(2, '0')).join('');
+  };
+  
+  // Simple encryption/decryption functions
+  const encryptText = (text: string): string => {
+    if (!text) return text;
+    try {
+      // Convert text to a simple XOR cipher using a fixed key
+      const key = 'SIMPLE_KEY';
+      let result = '';
+      for(let i = 0; i < text.length; i++) {
+        result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+      }
+      // Convert to base64 for safe storage
+      return btoa(result);
+    } catch (error) {
+      console.error('Encryption error:', error);
+      return text;
+    }
+  };
+  
+  const decryptText = (encryptedText: string): string => {
+    if (!encryptedText) return encryptedText;
+    try {
+      // Check if the text is encrypted (base64)
+      if (!/^[a-zA-Z0-9+/=]+$/.test(encryptedText)) {
+        return encryptedText;
+      }
+      
+      // Decode from base64
+      const decoded = atob(encryptedText);
+      
+      // Reverse the XOR cipher
+      const key = 'SIMPLE_KEY';
+      let result = '';
+      for(let i = 0; i < decoded.length; i++) {
+        result += String.fromCharCode(decoded.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+      }
+      return result;
+    } catch (error) {
+      console.error('Decryption error:', error);
+      return encryptedText;
+    }
+  };
+
+  // Initialize encryption key on first load
+  useEffect(() => {
+    const initializeKey = () => {
+      let key = localStorage.getItem('note_encryption_key');
+      if (!key) {
+        key = generateEncryptionKey();
+        localStorage.setItem('note_encryption_key', key);
+      }
+      setEncryptionKey(key);
+      
+      // Set master password state
+      const hasPassword = localStorage.getItem('note_master_password_hash') !== null;
+      setHasMasterPassword(hasPassword);
+      
+      if (hasPassword) {
+        setShowPasswordDialog(true);
+      } else {
+        setMasterPasswordSet(true);
+      }
+    };
+
+    initializeKey();
+  }, []);
+  
+  // Add master password state
+  const [hasMasterPassword, setHasMasterPassword] = useState(false);
+  const [masterPasswordSet, setMasterPasswordSet] = useState(false);
+  const [showPasswordDialog, setShowPasswordDialog] = useState(false);
+  const [passwordInput, setPasswordInput] = useState('');
+  const [passwordError, setPasswordError] = useState('');
+
+  // Function to derive a key from password using PBKDF2
+  const deriveKeyFromPassword = async (password: string, salt?: string): Promise<{key: CryptoKey, salt: string}> => {
+    // Generate salt if not provided
+    const useSalt = salt || crypto.randomUUID().replace(/-/g, '');
+    
+    // Convert password to key material
+    const encoder = new TextEncoder();
+    const passwordData = encoder.encode(password);
+    
+    // Import password as raw key
+    const baseKey = await window.crypto.subtle.importKey(
+      'raw',
+      passwordData,
+      'PBKDF2',
+      false,
+      ['deriveBits', 'deriveKey']
+    );
+    
+    // Derive a key using PBKDF2
+    const key = await window.crypto.subtle.deriveKey(
+      {
+        name: 'PBKDF2',
+        salt: encoder.encode(useSalt),
+        iterations: 100000,
+        hash: 'SHA-256'
+      },
+      baseKey,
+      { name: 'AES-GCM', length: 256 },
+      true,
+      ['encrypt', 'decrypt']
+    );
+    
+    return { key, salt: useSalt };
+  };
+
+  // Set master password
+  const setMasterPassword = async (password: string) => {
+    try {
+      // Derive key from password
+      const { key, salt } = await deriveKeyFromPassword(password);
+      
+      // Export key to raw format
+      const rawKey = await window.crypto.subtle.exportKey('raw', key);
+      
+      // Store key hash and salt
+      const keyArray = Array.from(new Uint8Array(rawKey));
+      const keyHash = keyArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      
+      // Store hash and salt for verification
+      localStorage.setItem('note_master_password_hash', keyHash);
+      localStorage.setItem('note_master_password_salt', salt);
+      
+      // Create a new encryption key encrypted with the master password
+      const newEncryptionKey = generateEncryptionKey();
+      
+      // Store the encrypted encryption key
+      localStorage.setItem('note_encryption_key', newEncryptionKey);
+      setEncryptionKey(newEncryptionKey);
+      
+      setHasMasterPassword(true);
+      setMasterPasswordSet(true);
+      setShowPasswordDialog(false);
+    } catch (error) {
+      console.error('Error setting master password:', error);
+      setPasswordError('Failed to set password. Please try again.');
+    }
+  };
+
+  // Verify master password
+  const verifyMasterPassword = async (password: string) => {
+    try {
+      const storedHash = localStorage.getItem('note_master_password_hash');
+      const storedSalt = localStorage.getItem('note_master_password_salt');
+      
+      if (!storedHash || !storedSalt) {
+        setPasswordError('No password hash found. Please reset your password.');
+        return false;
+      }
+      
+      // Derive key with stored salt
+      const { key } = await deriveKeyFromPassword(password, storedSalt);
+      
+      // Export key to compare with stored hash
+      const rawKey = await window.crypto.subtle.exportKey('raw', key);
+      const keyArray = Array.from(new Uint8Array(rawKey));
+      const derivedHash = keyArray.map(b => b.toString(16).padStart(2, '0')).join('');
+      
+      // Compare hashes
+      const match = derivedHash === storedHash;
+      
+      if (match) {
+        // Load encryption key
+        const key = localStorage.getItem('note_encryption_key');
+        if (key) {
+          setEncryptionKey(key);
+        }
+        
+        setMasterPasswordSet(true);
+        setShowPasswordDialog(false);
+        setPasswordError('');
+      } else {
+        setPasswordError('Incorrect password. Please try again.');
+      }
+      
+      return match;
+    } catch (error) {
+      console.error('Error verifying password:', error);
+      setPasswordError('Failed to verify password. Please try again.');
+      return false;
+    }
+  };
+
+  // Handle password submission
+  const handlePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    
+    if (passwordInput.length < 8) {
+      setPasswordError('Password must be at least 8 characters long.');
+      return;
+    }
+    
+    setPasswordError('');
+    
+    if (hasMasterPassword) {
+      await verifyMasterPassword(passwordInput);
+    } else {
+      await setMasterPassword(passwordInput);
+    }
+    
+    setPasswordInput('');
+  };
 
   useEffect(() => {
     const initializeApp = async () => {
+      // First ensure we have encryption key
+      const key = localStorage.getItem('note_encryption_key');
+      if (key) {
+        setEncryptionKey(key);
+      }
+
+      // Then fetch notes and profile
       await fetchNotes();
       await fetchUserProfile();
 
@@ -353,6 +573,11 @@ export default function NotesApp() {
     }
   };
 
+  const handleAvatarUploaded = (url: string) => {
+    setUserProfile(prev => ({ ...prev, avatar_url: url }));
+    setShowAvatarUploader(false);
+  };
+
   const fetchNotes = async () => {
     setIsLoading(true);
     const { data: { user } } = await supabase.auth.getUser();
@@ -367,10 +592,21 @@ export default function NotesApp() {
 
     if (error) {
       console.error('Error fetching notes:', error);
-    } else {
-      setNotes(data || []);
-      if (data && data.length > 0 && !activeNote) {
-        setActiveNote(data[0]);
+    } else if (data) {
+      try {
+        // Decrypt notes with simplified method
+        const decryptedNotes = data.map(note => ({
+          ...note,
+          title: decryptText(note.title),
+          content: decryptText(note.content || '')
+        }));
+        
+        setNotes(decryptedNotes);
+        if (decryptedNotes.length > 0 && !activeNote) {
+          setActiveNote(decryptedNotes[0]);
+        }
+      } catch (error) {
+        console.error('Error decrypting notes:', error);
       }
     }
     setIsLoading(false);
@@ -385,27 +621,39 @@ export default function NotesApp() {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) return;
 
-    const newNote = {
-      title: 'Untitled Note',
-      content: '',
-      user_id: user.id,
-      is_pinned: false
-    };
+    try {
+      const encryptedTitle = encryptText('Untitled Note');
+      
+      const newNote = {
+        title: encryptedTitle,
+        content: '',
+        user_id: user.id,
+        is_pinned: false
+      };
 
-    const { data, error } = await supabase
-      .from('notes')
-      .insert(newNote)
-      .select()
-      .single();
+      const { data, error } = await supabase
+        .from('notes')
+        .insert(newNote)
+        .select()
+        .single();
 
-    if (error) {
-      console.error('Error creating note:', error);
-    } else {
-      setNotes([data, ...notes]);
-      setActiveNote(data);
-      if (window.innerWidth < 768) {
-        setSidebarOpen(false);
+      if (error) {
+        console.error('Error creating note:', error);
+      } else {
+        const decryptedNote = {
+          ...data,
+          title: 'Untitled Note',
+          content: ''
+        };
+        
+        setNotes([decryptedNote, ...notes]);
+        setActiveNote(decryptedNote);
+        if (window.innerWidth < 768) {
+          setSidebarOpen(false);
+        }
       }
+    } catch (error) {
+      console.error('Error during note creation:', error);
     }
   };
 
@@ -413,35 +661,41 @@ export default function NotesApp() {
     if (!updatedNote) return;
     setIsSaving(true);
 
-    const { error } = await supabase
-      .from('notes')
-      .update({
-        title: updatedNote.title,
-        content: updatedNote.content,
-        is_pinned: updatedNote.is_pinned,
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', updatedNote.id);
+    try {
+      const encryptedTitle = encryptText(updatedNote.title);
+      const encryptedContent = encryptText(updatedNote.content || '');
+      
+      const { error } = await supabase
+        .from('notes')
+        .update({
+          title: encryptedTitle,
+          content: encryptedContent,
+          is_pinned: updatedNote.is_pinned,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', updatedNote.id);
 
-    if (error) {
-      console.error('Error updating note:', error);
-    } else {
-      // Update the local state and sort the notes
-      const updatedNotes = notes.map(note => 
-        note.id === updatedNote.id ? updatedNote : note
-      );
-      
-      // Re-sort notes to maintain pinned order
-      const sortedNotes = [...updatedNotes].sort((a, b) => {
-        if (a.is_pinned && !b.is_pinned) return -1;
-        if (!a.is_pinned && b.is_pinned) return 1;
-        return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
-      });
-      
-      setNotes(sortedNotes);
-      setShowSaveNotification(true);
-      setTimeout(() => setShowSaveNotification(false), 2000);
+      if (error) {
+        console.error('Error updating note:', error);
+      } else {
+        const updatedNotes = notes.map(note => 
+          note.id === updatedNote.id ? updatedNote : note
+        );
+        
+        const sortedNotes = [...updatedNotes].sort((a, b) => {
+          if (a.is_pinned && !b.is_pinned) return -1;
+          if (!a.is_pinned && b.is_pinned) return 1;
+          return new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime();
+        });
+        
+        setNotes(sortedNotes);
+        setShowSaveNotification(true);
+        setTimeout(() => setShowSaveNotification(false), 2000);
+      }
+    } catch (error) {
+      console.error('Error during note update:', error);
     }
+    
     setIsSaving(false);
   };
 
@@ -542,23 +796,56 @@ export default function NotesApp() {
 
   const handleImageUploaded = (imageUrl: string) => {
     if (activeNote) {
-      // Insert the image at cursor position
-      const img = `<img src="${imageUrl}" alt="Uploaded image" style="max-width: 100%; margin: 10px 0;" />`;
+      // Create a styled image tag with better size control
+      const img = `<figure class="note-image">
+        <img src="${imageUrl}" alt="Uploaded image" style="max-width: 100%; max-height: 300px; display: block; margin: 0 auto; border-radius: 8px;" />
+      </figure>`;
       
-      // Insert image into the editor content
+      // Add image to the note content - append to the end or create new content
       const updatedContent = activeNote.content 
-        ? activeNote.content.replace(/<\/p>$/, `${img}</p>`)
+        ? activeNote.content + img
         : `<p>${img}</p>`;
       
       // Update note with new content
       const updatedNote = { ...activeNote, content: updatedContent };
       setActiveNote(updatedNote);
-      debouncedUpdate(updatedNote);
+      updateNote(updatedNote);
     }
     
     // Close the uploader
     setShowImageUploader(false);
   };
+
+  // Add CSS styles for note images
+  useEffect(() => {
+    // Add a style tag for note image styling
+    const styleTag = document.createElement('style');
+    styleTag.innerHTML = `
+      .note-image {
+        display: block;
+        margin: 1rem 0;
+        max-width: 100%;
+      }
+      
+      .note-image img {
+        display: block;
+        max-width: 100%;
+        max-height: 400px;
+        border-radius: 8px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+      }
+
+      .mobile-menu-item img.avatar {
+        margin: 0 auto;
+      }
+    `;
+    document.head.appendChild(styleTag);
+    
+    return () => {
+      // Clean up style tag on unmount
+      document.head.removeChild(styleTag);
+    };
+  }, []);
 
   return (
     <div className="flex flex-col h-screen bg-[rgb(var(--background))] text-[rgb(var(--foreground))] transition-colors duration-200">
@@ -589,10 +876,18 @@ export default function NotesApp() {
           <div className="relative">
             <button
               onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-              className="flex items-center justify-center p-2 rounded-full hover:bg-[rgb(var(--secondary))]"
+              className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-[rgb(var(--secondary))]"
               aria-label="Profile menu"
             >
-              <FiUser />
+              {userProfile.avatar_url ? (
+                <img 
+                  src={`${userProfile.avatar_url}?t=${new Date().getTime()}`} 
+                  alt="User Avatar" 
+                  className="w-8 h-8 rounded-full object-cover"
+                />
+              ) : (
+                <FiUser />
+              )}
             </button>
             
             <AnimatePresence>
@@ -603,7 +898,31 @@ export default function NotesApp() {
                   exit={{ opacity: 0, y: -10 }}
                   className="absolute right-0 mt-2 w-64 rounded-lg shadow-lg py-1 bg-[rgb(var(--card))] border border-[rgb(var(--border))] z-10"
                 >
-                  <div className="p-3 mb-1 border-b border-[rgb(var(--border))]">
+                  <div className="p-3 border-b border-[rgb(var(--border))]">
+                    <div className="flex justify-center mb-3">
+                      <button
+                        onClick={() => {
+                          setShowAvatarUploader(true);
+                          setProfileMenuOpen(false);
+                        }}
+                        className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-[rgb(var(--accent))] hover:opacity-90 transition-opacity"
+                      >
+                        {userProfile.avatar_url ? (
+                          <img 
+                            src={userProfile.avatar_url} 
+                            alt="User Avatar" 
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-[rgb(var(--secondary))]">
+                            <FiUser size={28} />
+                          </div>
+                        )}
+                        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 opacity-0 hover:opacity-100 transition-opacity">
+                          <FiUpload color="white" />
+                        </div>
+                      </button>
+                    </div>
                     <ThemeSelector />
                   </div>
                   
@@ -851,7 +1170,15 @@ export default function NotesApp() {
             onClick={() => setProfileMenuOpen(!profileMenuOpen)}
             className={`mobile-menu-item ${profileMenuOpen ? 'active' : ''}`}
           >
-            <FiUser size={20} />
+            {userProfile.avatar_url ? (
+              <img 
+                src={`${userProfile.avatar_url}?t=${new Date().getTime()}`} 
+                alt="User Avatar" 
+                className="w-5 h-5 rounded-full object-cover avatar"
+              />
+            ) : (
+              <FiUser size={20} />
+            )}
             <span className="text-xs">Profile</span>
           </button>
         </nav>
@@ -864,6 +1191,74 @@ export default function NotesApp() {
             onImageUploaded={handleImageUploaded}
             onCancel={() => setShowImageUploader(false)}
           />
+        )}
+      </AnimatePresence>
+
+      {/* Avatar Uploader Modal */}
+      <AnimatePresence>
+        {showAvatarUploader && (
+          <AvatarUploader
+            onAvatarUploaded={handleAvatarUploaded}
+            onCancel={() => setShowAvatarUploader(false)}
+            currentAvatarUrl={userProfile.avatar_url}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Password Protection Modal */}
+      <AnimatePresence>
+        {showPasswordDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[rgb(var(--card))] rounded-lg shadow-xl max-w-md w-full overflow-hidden"
+            >
+              <div className="flex items-center justify-between p-4 border-b border-[rgb(var(--border))]">
+                <h3 className="font-medium">{hasMasterPassword ? 'Enter Master Password' : 'Set Master Password'}</h3>
+              </div>
+              
+              <div className="p-6">
+                <p className="mb-4 text-[rgb(var(--foreground))]">
+                  {hasMasterPassword 
+                    ? 'Enter your master password to unlock your notes.' 
+                    : 'Set a master password to protect your notes with unbreakable encryption.'}
+                </p>
+                
+                <form onSubmit={handlePasswordSubmit}>
+                  <div className="mb-4">
+                    <input
+                      type="password"
+                      value={passwordInput}
+                      onChange={(e) => setPasswordInput(e.target.value)}
+                      placeholder="Enter password"
+                      className="w-full p-2 border border-[rgb(var(--border))] rounded bg-[rgb(var(--background))] text-[rgb(var(--foreground))]"
+                      autoFocus
+                    />
+                    {passwordError && (
+                      <p className="mt-2 text-[rgb(var(--error))] text-sm">
+                        {passwordError}
+                      </p>
+                    )}
+                  </div>
+                  
+                  <button
+                    type="submit"
+                    className="w-full px-4 py-2 bg-[rgb(var(--accent))] text-white rounded-md hover:bg-[rgb(var(--accent-hover))] transition-colors"
+                  >
+                    {hasMasterPassword ? 'Unlock' : 'Set Password'}
+                  </button>
+                </form>
+                
+                <div className="mt-4 text-xs text-[rgb(var(--foreground))] opacity-70 text-center">
+                  {hasMasterPassword 
+                    ? 'Your notes are protected with military-grade encryption.' 
+                    : 'This password cannot be recovered. Make sure to remember it!'}
+                </div>
+              </div>
+            </motion.div>
+          </div>
         )}
       </AnimatePresence>
     </div>
