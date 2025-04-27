@@ -716,6 +716,25 @@ export default function NotesApp() {
     }
   };
 
+  // Add state for delete confirmation
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [noteToDelete, setNoteToDelete] = useState<Note | null>(null);
+
+  // Add delete confirmation handler
+  const handleDeleteNote = (note: Note) => {
+    setNoteToDelete(note);
+    setShowDeleteDialog(true);
+  };
+
+  // Add confirm delete handler
+  const confirmDelete = async () => {
+    if (noteToDelete) {
+      await deleteNote(noteToDelete.id);
+      setShowDeleteDialog(false);
+      setNoteToDelete(null);
+    }
+  };
+
   const togglePin = async (note: Note) => {
     const updatedNote = { 
       ...note, 
@@ -847,6 +866,28 @@ export default function NotesApp() {
     };
   }, []);
 
+  // Add ref for profile menu
+  const profileMenuRef = useRef<HTMLDivElement>(null);
+  const profileButtonRef = useRef<HTMLButtonElement>(null);
+
+  // Add click outside handler
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (profileMenuOpen &&
+          profileMenuRef.current &&
+          profileButtonRef.current &&
+          !profileMenuRef.current.contains(event.target as Node) &&
+          !profileButtonRef.current.contains(event.target as Node)) {
+        setProfileMenuOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [profileMenuOpen]);
+
   return (
     <div className="flex flex-col h-screen bg-[rgb(var(--background))] text-[rgb(var(--foreground))] transition-colors duration-200">
       {/* Header */}
@@ -875,6 +916,7 @@ export default function NotesApp() {
           
           <div className="relative">
             <button
+              ref={profileButtonRef}
               onClick={() => setProfileMenuOpen(!profileMenuOpen)}
               className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-[rgb(var(--secondary))]"
               aria-label="Profile menu"
@@ -893,6 +935,7 @@ export default function NotesApp() {
             <AnimatePresence>
               {profileMenuOpen && (
                 <motion.div
+                  ref={profileMenuRef}
                   initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
                   exit={{ opacity: 0, y: -10 }}
@@ -1068,7 +1111,7 @@ export default function NotesApp() {
                       <FiMapPin />
                     </button>
                     <button
-                      onClick={() => deleteNote(activeNote.id)}
+                      onClick={() => handleDeleteNote(activeNote)}
                       className="p-2 rounded-full hover:bg-[rgb(var(--secondary))] text-[rgb(var(--error))]"
                       aria-label="Delete note"
                     >
@@ -1157,7 +1200,7 @@ export default function NotesApp() {
               </button>
               
               <button
-                onClick={() => deleteNote(activeNote.id)}
+                onClick={() => handleDeleteNote(activeNote)}
                 className="mobile-menu-item text-[rgb(var(--error))]"
               >
                 <FiTrash2 size={20} />
@@ -1255,6 +1298,45 @@ export default function NotesApp() {
                   {hasMasterPassword 
                     ? 'Your notes are protected with military-grade encryption.' 
                     : 'This password cannot be recovered. Make sure to remember it!'}
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Confirmation Dialog */}
+      <AnimatePresence>
+        {showDeleteDialog && (
+          <div className="fixed inset-0 bg-black bg-opacity-50 z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              className="bg-[rgb(var(--card))] rounded-lg shadow-xl max-w-md w-full overflow-hidden"
+            >
+              <div className="p-6">
+                <h3 className="text-lg font-medium mb-2">Delete Note</h3>
+                <p className="mb-4 text-[rgb(var(--foreground))] opacity-80">
+                  Are you sure you want to delete "{noteToDelete?.title || 'Untitled'}"? This action cannot be undone.
+                </p>
+                
+                <div className="flex justify-end space-x-3">
+                  <button
+                    onClick={() => {
+                      setShowDeleteDialog(false);
+                      setNoteToDelete(null);
+                    }}
+                    className="px-4 py-2 rounded-md hover:bg-[rgb(var(--secondary))] transition-colors"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    onClick={confirmDelete}
+                    className="px-4 py-2 bg-[rgb(var(--error))] text-white rounded-md hover:bg-opacity-90 transition-colors"
+                  >
+                    Delete
+                  </button>
                 </div>
               </div>
             </motion.div>
