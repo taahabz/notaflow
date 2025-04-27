@@ -24,6 +24,8 @@ import {
   FiList,
   FiLink
 } from 'react-icons/fi';
+import { useThemeContext, ThemeType } from '@/contexts/ThemeContext';
+import ImageUploader from './components/ImageUploader';
 
 // Custom Editor Component with proper types
 const RichTextEditor = ({ 
@@ -35,35 +37,63 @@ const RichTextEditor = ({
   onChange: (content: string) => void; 
   placeholder: string;
 }) => {
-  const editorRef = useRef<HTMLDivElement | null>(null);
+  const editorRef = useRef<HTMLDivElement>(null);
+  
+  // Initialize the editor on mount and when value changes
+  useEffect(() => {
+    if (editorRef.current) {
+      // Only update innerHTML if the HTML content is different
+      // This prevents cursor position reset when typing
+      if (editorRef.current.innerHTML !== value) {
+        editorRef.current.innerHTML = value;
+      }
+    }
+  }, [value]);
+
+  // Make sure placeholder is shown when content is empty
+  useEffect(() => {
+    if (editorRef.current) {
+      if (!value || value === '<p></p>' || value === '<br>') {
+        editorRef.current.classList.add('empty');
+      } else {
+        editorRef.current.classList.remove('empty');
+      }
+    }
+  }, [value]);
 
   const handleChange = () => {
     if (editorRef.current) {
-      onChange(editorRef.current.innerHTML);
+      const content = editorRef.current.innerHTML;
+      onChange(content);
     }
   };
 
-  const handleBold = () => {
+  const handleBold = (e: React.MouseEvent) => {
+    e.preventDefault();
     document.execCommand('bold', false);
     handleChange();
   };
 
-  const handleItalic = () => {
+  const handleItalic = (e: React.MouseEvent) => {
+    e.preventDefault();
     document.execCommand('italic', false);
     handleChange();
   };
 
-  const handleList = () => {
+  const handleList = (e: React.MouseEvent) => {
+    e.preventDefault();
     document.execCommand('insertUnorderedList', false);
     handleChange();
   };
 
-  const handleOrderedList = () => {
+  const handleOrderedList = (e: React.MouseEvent) => {
+    e.preventDefault();
     document.execCommand('insertOrderedList', false);
     handleChange();
   };
 
-  const handleLink = () => {
+  const handleLink = (e: React.MouseEvent) => {
+    e.preventDefault();
     const url = prompt('Enter URL:');
     if (url) {
       document.execCommand('createLink', false, url);
@@ -96,8 +126,7 @@ const RichTextEditor = ({
       <div
         ref={editorRef}
         contentEditable
-        className="flex-1 p-4 overflow-auto outline-none bg-[rgb(var(--background))] text-[rgb(var(--foreground))]"
-        dangerouslySetInnerHTML={{ __html: value }}
+        className={`flex-1 p-4 overflow-auto outline-none bg-[rgb(var(--background))] text-[rgb(var(--foreground))] ${!value ? 'empty' : ''}`}
         onInput={handleChange}
         onBlur={handleChange}
         data-placeholder={placeholder}
@@ -145,6 +174,29 @@ export default function NotesApp() {
     avatar_url: null, 
     theme: Theme.LIGHT 
   });
+  
+  // Reference to the current active editor element
+  const currentEditorElement = useRef<HTMLElement | null>(null);
+
+  // Update the current editor element when the editor rendered
+  const updateEditorRef = (element: HTMLElement | null) => {
+    currentEditorElement.current = element;
+  };
+
+  const { theme, setTheme } = useThemeContext()
+  
+  const themes = [
+    { value: Theme.LIGHT, label: 'Light', color: { bg: 'rgb(252, 252, 252)', text: 'rgb(28, 28, 30)', accent: 'rgb(225, 185, 40)' } },
+    { value: Theme.DARK, label: 'Dark', color: { bg: 'rgb(20, 20, 24)', text: 'rgb(250, 250, 252)', accent: 'rgb(245, 205, 50)' } },
+    { value: Theme.BLUE, label: 'Blue', color: { bg: 'rgb(248, 252, 255)', text: 'rgb(10, 35, 75)', accent: 'rgb(15, 100, 230)' } },
+    { value: Theme.GREEN, label: 'Green', color: { bg: 'rgb(248, 254, 250)', text: 'rgb(10, 60, 35)', accent: 'rgb(20, 162, 80)' } },
+    { value: Theme.PURPLE, label: 'Purple', color: { bg: 'rgb(252, 250, 255)', text: 'rgb(60, 25, 90)', accent: 'rgb(115, 60, 225)' } },
+    { value: Theme.PINK, label: 'Pink', color: { bg: 'rgb(255, 250, 252)', text: 'rgb(85, 25, 50)', accent: 'rgb(230, 65, 115)' } },
+    { value: Theme.ORANGE, label: 'Orange', color: { bg: 'rgb(255, 252, 250)', text: 'rgb(75, 40, 15)', accent: 'rgb(235, 125, 35)' } },
+  ]
+
+  const [showImageUploader, setShowImageUploader] = useState(false);
+  const [showMobileMenu, setShowMobileMenu] = useState(false);
 
   useEffect(() => {
     const initializeApp = async () => {
@@ -257,19 +309,24 @@ export default function NotesApp() {
     }
   };
 
-  const updateTheme = async (theme: Theme) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
-
-    const { error } = await supabase
-      .from('profiles')
-      .update({ theme })
-      .eq('user_id', user.id);
-
-    if (!error) {
-      setUserProfile(prev => ({ ...prev, theme }));
-      updateThemeClass(theme);
-      localStorage.setItem('theme', theme);
+  const updateTheme = async (selectedTheme: Theme) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      
+      // Update in database
+      await supabase
+        .from('profiles')
+        .update({ theme: selectedTheme })
+        .eq('id', user.id);
+      
+      // Update in context
+      setTheme(selectedTheme as ThemeType);
+      
+      // Close profile menu
+      setProfileMenuOpen(false);
+    } catch (error) {
+      console.error('Error updating theme:', error);
     }
   };
 
@@ -287,7 +344,7 @@ export default function NotesApp() {
       .upload(filePath, file);
 
     if (uploadError) {
-      console.error('Upload error:', uploadError);
+      console.error('Avatar upload error:', uploadError);
       return;
     }
 
@@ -450,382 +507,375 @@ export default function NotesApp() {
     }
   }, [activeNote?.title, activeNote?.content]);
 
-  const ThemeSelector = ({ onSelect, currentTheme }: { onSelect: (theme: Theme) => void, currentTheme: Theme }) => {
-    const [showThemePicker, setShowThemePicker] = useState(false);
-    
-    const themeOptions = [
-      { name: 'Light', value: Theme.LIGHT, color: 'bg-white border border-gray-200' },
-      { name: 'Dark', value: Theme.DARK, color: 'bg-black border border-gray-800' },
-      { name: 'Blue', value: Theme.BLUE, color: 'bg-blue-50 border border-blue-200' },
-      { name: 'Green', value: Theme.GREEN, color: 'bg-green-50 border border-green-200' },
-      { name: 'Purple', value: Theme.PURPLE, color: 'bg-purple-50 border border-purple-200' },
-      { name: 'Pink', value: Theme.PINK, color: 'bg-pink-50 border border-pink-200' },
-      { name: 'Orange', value: Theme.ORANGE, color: 'bg-orange-50 border border-orange-200' },
-    ];
-    
+  const ThemeSelector = () => {
     return (
-      <div className="relative">
-        <button
-          onClick={() => setShowThemePicker(!showThemePicker)}
-          className="w-full flex items-center gap-2 p-2 hover:bg-gray-100 dark:hover:bg-gray-800 rounded-md text-black dark:text-white"
-        >
-          <FiSettings className="w-5 h-5" />
-          <span className="text-sm">Theme Options</span>
-        </button>
-        
-        {showThemePicker && (
-          <div className="absolute left-0 right-0 mt-1 p-2 bg-white dark:bg-gray-900 border border-gray-200 dark:border-gray-800 rounded-md shadow-lg z-40">
-            <p className="text-xs text-gray-500 dark:text-gray-400 mb-2 text-center">Choose a theme</p>
-            <div className="grid grid-cols-3 gap-2">
-              {themeOptions.map((option) => (
-                <button
-                  key={option.value}
-                  onClick={() => {
-                    onSelect(option.value);
-                    setShowThemePicker(false);
-                  }}
-                  className={`p-2 rounded-md flex flex-col items-center gap-1 ${
-                    currentTheme === option.value ? 'ring-2 ring-yellow-400' : ''
-                  }`}
-                >
-                  <div className={`w-6 h-6 rounded-full ${option.color}`}></div>
-                  <span className="text-xs text-black dark:text-white">{option.name}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-        )}
+      <div className="theme-selector flex flex-col bg-[rgb(var(--card))] border border-[rgb(var(--border))] rounded-lg p-3 shadow-md">
+        <h3 className="text-sm font-medium mb-3 text-[rgb(var(--foreground))]">Color Theme</h3>
+        <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:flex md:flex-wrap">
+          {themes.map((t) => (
+            <button
+              key={t.value}
+              onClick={() => setTheme(t.value as ThemeType)}
+              className={`relative flex flex-col items-center justify-center p-2 rounded-md transition-all hover:scale-[1.05] ${
+                theme === t.value ? 'ring-2 ring-[rgb(var(--accent))]' : 'hover:bg-[rgb(var(--secondary-hover))]'
+              }`}
+              style={{
+                background: t.color.bg,
+                color: t.color.text,
+              }}
+            >
+              <span 
+                className="w-6 h-6 rounded-full mb-1"
+                style={{ background: t.color.accent }}
+              />
+              <span 
+                className="text-xs font-medium"
+                style={{ color: t.color.text }}
+              >
+                {t.label}
+              </span>
+              {theme === t.value && (
+                <div className="absolute -top-1 -right-1 w-4 h-4 bg-[rgb(var(--accent))] rounded-full flex items-center justify-center">
+                  <FiCheck size={10} className="text-white" />
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
       </div>
     );
   };
 
-  // Update handleImageUpload to work with our custom editor
-  const handleImageUpload = async () => {
-    const input = document.createElement('input');
-    input.setAttribute('type', 'file');
-    input.setAttribute('accept', 'image/*');
-    input.click();
+  const handleImageUpload = () => {
+    setShowImageUploader(true);
+  };
 
-    input.onchange = async () => {
-      const file = input.files?.[0];
-      if (!file) return;
-
-      try {
-        // Compress image if needed
-        let imageFile = file;
-        if (file.size > 1024 * 1024) {
-          // If more than 1MB, import and use the compression library
-          const imageCompression = await import('browser-image-compression');
-          imageFile = await imageCompression.default(file, {
-            maxSizeMB: 1,
-            maxWidthOrHeight: 1920
-          });
-        }
-
-        // Get current user
-        const { data: { user } } = await supabase.auth.getUser();
-        if (!user) return;
-
-        // Upload to supabase
-        const fileExt = file.name.split('.').pop();
-        const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-        const filePath = `${fileName}`;
-
-        // Upload image
-        const { error: uploadError } = await supabase.storage
-          .from('note_images')
-          .upload(filePath, imageFile);
-
-        if (uploadError) {
-          console.error('Image upload error:', uploadError);
-          return;
-        }
-
-        // Get public URL
-        const { data: { publicUrl } } = supabase.storage
-          .from('note_images')
-          .getPublicUrl(filePath);
-
-        // Insert image using document.execCommand
-        if (activeNote) {
-          document.execCommand('insertImage', false, publicUrl);
-          // Get the editor div element
-          const editorDiv = document.querySelector('[contenteditable="true"]') as HTMLDivElement;
-          if (editorDiv) {
-            // Update the note content in state
-            setActiveNote({
-              ...activeNote,
-              content: editorDiv.innerHTML
-            });
-          }
-        }
-      } catch (error) {
-        console.error('Error in image upload:', error);
-      }
-    };
+  const handleImageUploaded = (imageUrl: string) => {
+    if (activeNote) {
+      // Insert the image at cursor position
+      const img = `<img src="${imageUrl}" alt="Uploaded image" style="max-width: 100%; margin: 10px 0;" />`;
+      
+      // Insert image into the editor content
+      const updatedContent = activeNote.content 
+        ? activeNote.content.replace(/<\/p>$/, `${img}</p>`)
+        : `<p>${img}</p>`;
+      
+      // Update note with new content
+      const updatedNote = { ...activeNote, content: updatedContent };
+      setActiveNote(updatedNote);
+      debouncedUpdate(updatedNote);
+    }
+    
+    // Close the uploader
+    setShowImageUploader(false);
   };
 
   return (
-    <div className={`flex h-screen font-sans bg-[rgb(var(--background))] text-[rgb(var(--foreground))]`}>
-      {/* Mobile Overlay */}
-      {sidebarOpen && (
-        <div 
-          className="fixed inset-0 bg-black/30 md:hidden z-20"
-          onClick={() => setSidebarOpen(false)}
-        />
-      )}
-  
-      {/* Sidebar */}
-      <div 
-        className={`fixed md:relative z-30 w-72 h-full bg-[rgb(var(--secondary))] border-r border-[rgb(var(--border))] md:shadow-none transform transition-transform duration-300 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full md:translate-x-0'
-        }`}
-      >
-        <div className={`p-4 border-b border-[rgb(var(--border))] flex items-center justify-between`}>
-          <h1 className="text-xl font-semibold text-[rgb(var(--foreground))]">Notes</h1>
+    <div className="flex flex-col h-screen bg-[rgb(var(--background))] text-[rgb(var(--foreground))] transition-colors duration-200">
+      {/* Header */}
+      <header className="flex items-center justify-between p-3 md:p-4 border-b border-[rgb(var(--border))] bg-[rgb(var(--card))]">
+        <div className="flex items-center">
           <button
-            onClick={() => setSidebarOpen(false)}
-            className="md:hidden p-1.5 rounded-full hover:bg-[rgb(var(--secondary-hover))]"
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className="p-2 rounded-full hover:bg-[rgb(var(--secondary))] mr-2 md:mr-4"
+            aria-label="Toggle sidebar"
           >
-            <FiX className="w-5 h-5 text-[rgb(var(--foreground))]" />
+            {sidebarOpen ? <FiX /> : <FiMenu />}
           </button>
+          <h1 className="font-semibold text-lg md:text-xl">Notaflow</h1>
         </div>
-  
-        <div className="p-4">
-          <button
-            onClick={createNewNote}
-            className="w-full py-2.5 px-4 rounded-full bg-[rgb(var(--accent))] text-black font-medium hover:bg-[rgb(var(--accent-hover))] transition-all flex items-center justify-center gap-2 shadow-sm"
-          >
-            <FiPlus className="w-5 h-5" />
-            <span>New Note</span>
-          </button>
-        </div>
-  
-        <div className="overflow-y-auto h-[calc(100%-180px)]">
-          {isLoading ? (
-            <div className="p-4 flex justify-center">
-              <div className="animate-pulse text-[rgb(var(--foreground))] opacity-60">Loading notes...</div>
-            </div>
-          ) : notes.length === 0 ? (
-            <div className="p-4 text-center text-[rgb(var(--foreground))] opacity-60 text-sm">
-              No notes found
-            </div>
-          ) : (
-            <ul className={`divide-y divide-[rgb(var(--border))]`}>
-              <AnimatePresence>
-                {notes.map(note => (
-                  <motion.li
-                    key={note.id}
-                    initial={{ opacity: 0, y: 10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    exit={{ opacity: 0, x: -100 }}
-                    transition={{ duration: 0.2 }}
-                    className={`p-3 cursor-pointer group ${
-                      activeNote?.id === note.id 
-                        ? 'bg-[rgb(var(--accent))] bg-opacity-10' 
-                        : 'hover:bg-[rgb(var(--secondary-hover))]'
-                    }`}
-                    onClick={() => {
-                      setActiveNote(note);
-                      if (window.innerWidth < 768) {
-                        setSidebarOpen(false);
-                      }
-                    }}
-                  >
-                    <div className="flex justify-between items-start">
-                      <div className="flex-1 min-w-0">
-                        <p className={`font-medium truncate text-[rgb(var(--foreground))]`}>
-                          {note.title || 'Untitled Note'}
-                        </p>
-                        <p className={`text-sm truncate mt-0.5 text-[rgb(var(--foreground))] opacity-70`}>
-                          {note.content.replace(/<[^>]*>/g, '').substring(0, 80).replace(/\n/g, ' ') || 'No additional text'}
-                        </p>
-                        <div className="flex items-center gap-2 mt-1.5">
-                          <span className={`text-xs text-[rgb(var(--foreground))] opacity-50`}>
-                            {formatDate(note.updated_at)}
-                          </span>
-                          {note.is_pinned && (
-                            <FiMapPin className="w-3.5 h-3.5 text-[rgb(var(--accent))]" />
-                          )}
-                        </div>
-                      </div>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          deleteNote(note.id);
-                        }}
-                        className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 hover:bg-[rgb(var(--secondary-hover))] rounded-full ml-2"
-                      >
-                        <FiTrash2 className="w-4 h-4 text-[rgb(var(--foreground))]" />
-                      </button>
-                    </div>
-                  </motion.li>
-                ))}
-              </AnimatePresence>
-            </ul>
-          )}
-        </div>
-  
-        <div className={`absolute bottom-0 left-0 right-0 p-4 border-t border-[rgb(var(--border))] bg-[rgb(var(--secondary))]`}>
-          <button
-            onClick={handleLogout}
-            className="flex items-center gap-2 w-full px-4 py-2.5 text-[rgb(var(--foreground))] hover:bg-[rgb(var(--secondary-hover))] rounded-full transition"
-          >
-            <FiLogOut className="w-5 h-5" />
-            <span>Logout</span>
-          </button>
-        </div>
-      </div>
-  
-      {/* Main Content */}
-      <div className={`flex-1 flex flex-col h-full overflow-hidden bg-[rgb(var(--background))]`}>
-        <div className={`p-4 border-b border-[rgb(var(--border))] flex items-center justify-between`}>
-          <div className="flex items-center gap-4">
+        
+        <div className="flex items-center space-x-2">
+          {activeNote && (
             <button
-              onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="md:hidden p-2 hover:bg-[rgb(var(--secondary))] rounded-full"
+              onClick={handleImageUpload}
+              className="p-2 rounded-full hover:bg-[rgb(var(--secondary))] text-[rgb(var(--foreground))]"
+              aria-label="Upload image"
             >
-              <FiMenu className="w-5 h-5 text-[rgb(var(--foreground))]" />
+              <FiImage />
             </button>
-            {activeNote ? (
-              <div className="flex items-center gap-3 flex-1">
-                <button
-                  onClick={() => togglePin(activeNote)}
-                  className={`p-2 rounded-full ${
-                    activeNote.is_pinned ? 'text-[rgb(var(--accent))]' : 'text-[rgb(var(--foreground))] opacity-60 hover:opacity-100'
-                  }`}
-                >
-                  <FiMapPin className="w-5 h-5" />
-                </button>
-                
-                <button
-                  onClick={handleImageUpload}
-                  className="p-2 rounded-full text-[rgb(var(--foreground))] opacity-60 hover:opacity-100 hover:bg-[rgb(var(--secondary))]"
-                >
-                  <FiImage className="w-5 h-5" />
-                </button>
-                
-                <input
-                  type="text"
-                  value={activeNote.title}
-                  onChange={(e) => setActiveNote({...activeNote, title: e.target.value})}
-                  className="text-xl font-semibold bg-transparent border-none focus:outline-none focus:ring-0 w-full text-[rgb(var(--foreground))]"
-                />
-                {isSaving && (
-                  <span className={`text-sm text-[rgb(var(--foreground))] opacity-60`}>Saving...</span>
-                )}
-              </div>
-            ) : (
-              <span className="text-xl font-semibold text-[rgb(var(--foreground))]">Notes</span>
-            )}
-          </div>
-  
-          {/* Profile Section */}
+          )}
+          
           <div className="relative">
-            <button 
+            <button
               onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-              className="p-1 rounded-full hover:bg-[rgb(var(--secondary))] transition-colors"
+              className="flex items-center justify-center p-2 rounded-full hover:bg-[rgb(var(--secondary))]"
+              aria-label="Profile menu"
             >
-              {userProfile.avatar_url ? (
-                <img 
-                  src={userProfile.avatar_url}
-                  alt="Profile"
-                  className="w-10 h-10 rounded-full object-cover border-2 border-[rgb(var(--border))]"
-                />
-              ) : (
-                <div className="w-10 h-10 rounded-full bg-[rgb(var(--secondary))] flex items-center justify-center border-2 border-[rgb(var(--border))]">
-                  <FiUser className="w-5 h-5 text-[rgb(var(--foreground))]" />
-                </div>
-              )}
+              <FiUser />
             </button>
-  
+            
             <AnimatePresence>
               {profileMenuOpen && (
                 <motion.div
-                  initial={{ opacity: 0, y: 10 }}
+                  initial={{ opacity: 0, y: -10 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: 10 }}
-                  className={`absolute right-0 top-12 w-48 rounded-lg shadow-xl border border-[rgb(var(--border))] bg-[rgb(var(--background))] p-2 z-30`}
-                  onClick={(e) => e.stopPropagation()}
+                  exit={{ opacity: 0, y: -10 }}
+                  className="absolute right-0 mt-2 w-64 rounded-lg shadow-lg py-1 bg-[rgb(var(--card))] border border-[rgb(var(--border))] z-10"
                 >
-                  <label className="flex items-center gap-2 p-2 cursor-pointer hover:bg-[rgb(var(--secondary))] rounded-md text-[rgb(var(--foreground))]">
-                    <input
-                      type="file"
-                      accept="image/*"
-                      className="hidden"
-                      onChange={(e) => {
-                        if (e.target.files?.[0]) {
-                          handleAvatarUpload(e.target.files[0]);
-                          setProfileMenuOpen(false);
-                        }
-                      }}
-                    />
-                    <FiUpload className="w-5 h-5" />
-                    <span className="text-sm">Change Photo</span>
-                  </label>
-                  
-                  <ThemeSelector 
-                    onSelect={(theme) => {
-                      updateTheme(theme);
-                      setProfileMenuOpen(false);
-                    }}
-                    currentTheme={userProfile.theme} 
-                  />
+                  <div className="p-3 mb-1 border-b border-[rgb(var(--border))]">
+                    <ThemeSelector />
+                  </div>
                   
                   <button
                     onClick={handleLogout}
-                    className="w-full flex items-center gap-2 p-2 text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-md"
+                    className="flex w-full items-center px-4 py-2 text-left hover:bg-[rgb(var(--secondary))] text-[rgb(var(--foreground))]"
                   >
-                    <FiLogOut className="w-5 h-5" />
-                    <span className="text-sm">Log Out</span>
+                    <FiLogOut className="mr-3" /> Sign Out
                   </button>
                 </motion.div>
               )}
             </AnimatePresence>
           </div>
         </div>
-  
-        {activeNote ? (
-          <div className="flex-1 overflow-auto p-4">
-            <RichTextEditor
-              value={activeNote.content}
-              onChange={(content) => setActiveNote({...activeNote, content})}
-              placeholder="Start writing your note here..."
-            />
-          </div>
-        ) : (
-          <div className="flex-1 flex items-center justify-center">
-            <div className={`text-center p-6 max-w-md text-[rgb(var(--foreground))]`}>
-              <FiEdit className={`w-12 h-12 mx-auto mb-4 text-[rgb(var(--foreground))] opacity-50`} />
-              <h2 className="text-xl font-medium mb-2">No Note Selected</h2>
-              <p className="mb-4 text-[rgb(var(--foreground))] opacity-70">
+      </header>
+      
+      {/* Main Content */}
+      <div className="flex flex-1 overflow-hidden">
+        {/* Sidebar */}
+        <AnimatePresence initial={false}>
+          {sidebarOpen && (
+            <motion.div
+              initial={{ width: 0, opacity: 0 }}
+              animate={{ width: "100%", opacity: 1 }}
+              exit={{ width: 0, opacity: 0 }}
+              transition={{ duration: 0.2 }}
+              className="bg-[rgb(var(--card))] border-r border-[rgb(var(--border))] flex flex-col w-full sm:max-w-xs md:max-w-sm min-h-0"
+            >
+              <div className="p-3 flex items-center justify-between border-b border-[rgb(var(--border))]">
+                <h2 className="font-medium">All Notes</h2>
+                <button
+                  onClick={createNewNote}
+                  className="p-2 rounded-full hover:bg-[rgb(var(--secondary))]"
+                  aria-label="Create new note"
+                >
+                  <FiPlus />
+                </button>
+              </div>
+              
+              <div className="flex-1 overflow-y-auto">
+                {isLoading ? (
+                  <div className="flex justify-center items-center h-32">
+                    <div className="animate-pulse">Loading notes...</div>
+                  </div>
+                ) : notes.length === 0 ? (
+                  <div className="p-4 text-center text-[rgb(var(--foreground))] opacity-70">
+                    <p>No notes yet</p>
+                    <button
+                      onClick={createNewNote}
+                      className="mt-2 text-[rgb(var(--accent))] hover:text-[rgb(var(--accent-hover))]"
+                    >
+                      Create your first note
+                    </button>
+                  </div>
+                ) : (
+                  // Note list
+                  <div className="divide-y divide-[rgb(var(--border))]">
+                    {notes.map((note) => (
+                      <div
+                        key={note.id}
+                        onClick={() => setActiveNote(note)}
+                        className={`note-list-item p-3 cursor-pointer hover:bg-[rgb(var(--secondary))] transition-colors ${
+                          activeNote?.id === note.id
+                            ? "bg-[rgb(var(--secondary))]"
+                            : ""
+                        }`}
+                      >
+                        <div className="flex justify-between items-start mb-1">
+                          <h3 className="font-medium truncate mr-2">
+                            {note.title || "Untitled"}
+                          </h3>
+                          <div className="flex items-center">
+                            {note.is_pinned && (
+                              <FiMapPin className="text-[rgb(var(--accent))]" />
+                            )}
+                          </div>
+                        </div>
+                        <div className="flex justify-between text-xs opacity-70">
+                          <div className="truncate max-w-[180px]">
+                            {note.content ? (
+                              <div dangerouslySetInnerHTML={{ 
+                                __html: note.content.replace(/<[^>]*>/g, ' ').substring(0, 80) + '...' 
+                              }} />
+                            ) : (
+                              "No content"
+                            )}
+                          </div>
+                          <div>{formatDate(note.updated_at)}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        
+        {/* Main editor area */}
+        <main className="flex-1 flex flex-col min-h-0 overflow-hidden bg-[rgb(var(--background))]">
+          {isLoading ? (
+            <div className="flex flex-col justify-center items-center h-full">
+              <div className="animate-pulse">Loading...</div>
+            </div>
+          ) : !activeNote ? (
+            <div className="flex flex-col justify-center items-center h-full text-center p-4">
+              <h2 className="text-xl font-medium mb-2">No note selected</h2>
+              <p className="text-[rgb(var(--foreground))] opacity-70 mb-4 max-w-md">
                 Select a note from the sidebar or create a new one to get started.
               </p>
               <button
                 onClick={createNewNote}
-                className="py-2 px-6 rounded-full bg-[rgb(var(--accent))] text-black font-medium hover:bg-[rgb(var(--accent-hover))] transition-all flex items-center justify-center gap-2 shadow-sm mx-auto"
+                className="flex items-center px-4 py-2 rounded-md bg-[rgb(var(--accent))] text-white hover:bg-[rgb(var(--accent-hover))] transition-colors"
               >
-                <FiPlus className="w-5 h-5" />
-                <span>New Note</span>
+                <FiPlus className="mr-2" /> Create new note
               </button>
             </div>
-          </div>
-        )}
-
-        <AnimatePresence>
-          {showSaveNotification && (
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              exit={{ opacity: 0, y: 20 }}
-              className="fixed bottom-4 right-4 bg-[rgb(var(--accent))] text-black px-4 py-2 rounded-lg shadow-lg flex items-center gap-2"
-            >
-              <FiCheck className="w-5 h-5" />
-              <span>Note saved</span>
-            </motion.div>
+          ) : (
+            <>
+              <div className="border-b border-[rgb(var(--border))] bg-[rgb(var(--card))]">
+                <div className="p-3 md:p-4 flex items-center justify-between">
+                  <div className="flex-1">
+                    <input
+                      type="text"
+                      value={activeNote.title}
+                      onChange={(e) => {
+                        const updatedNote = { ...activeNote, title: e.target.value };
+                        setActiveNote(updatedNote);
+                        debouncedUpdate(updatedNote);
+                      }}
+                      placeholder="Untitled"
+                      className="w-full bg-transparent outline-none font-medium text-lg"
+                    />
+                  </div>
+                  <div className="flex items-center space-x-2">
+                    <button
+                      onClick={() => togglePin(activeNote)}
+                      className={`p-2 rounded-full hover:bg-[rgb(var(--secondary))] ${
+                        activeNote.is_pinned ? "text-[rgb(var(--accent))]" : ""
+                      }`}
+                      aria-label={activeNote.is_pinned ? "Unpin note" : "Pin note"}
+                    >
+                      <FiMapPin />
+                    </button>
+                    <button
+                      onClick={() => deleteNote(activeNote.id)}
+                      className="p-2 rounded-full hover:bg-[rgb(var(--secondary))] text-[rgb(var(--error))]"
+                      aria-label="Delete note"
+                    >
+                      <FiTrash2 />
+                    </button>
+                  </div>
+                </div>
+              </div>
+              
+              <div className="flex-1 overflow-auto p-3 md:p-5 pb-24 md:pb-5">
+                <div className="h-full">
+                  <RichTextEditor
+                    value={activeNote.content || ''}
+                    onChange={(content) => {
+                      const updatedNote = { ...activeNote, content: content };
+                      setActiveNote(updatedNote);
+                      debouncedUpdate(updatedNote);
+                    }}
+                    placeholder="Start writing your note here..."
+                  />
+                </div>
+              </div>
+              
+              <div className="p-2 text-xs text-center opacity-60">
+                {isSaving ? "Saving..." : "All changes saved"}
+              </div>
+            </>
           )}
-        </AnimatePresence>
+        </main>
       </div>
+      
+      {/* Save notification */}
+      <AnimatePresence>
+        {showSaveNotification && (
+          <motion.div
+            initial={{ opacity: 0, y: 50 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: 50 }}
+            className="fixed bottom-4 right-4 bg-[rgb(var(--success))] text-white px-4 py-2 rounded-md shadow-lg"
+          >
+            Note saved!
+          </motion.div>
+        )}
+      </AnimatePresence>
+      
+      {/* Mobile floating action button */}
+      <div className="md:hidden">
+        {!activeNote && (
+          <button
+            onClick={createNewNote}
+            className="floating-action-button"
+            aria-label="Create new note"
+          >
+            <FiPlus size={24} />
+          </button>
+        )}
+      </div>
+      
+      {/* Mobile bottom menu - only shown on small screens */}
+      <div className="md:hidden">
+        <nav className="mobile-menu">
+          <button
+            onClick={() => setSidebarOpen(!sidebarOpen)}
+            className={`mobile-menu-item ${sidebarOpen ? 'active' : ''}`}
+          >
+            <FiMenu size={20} />
+            <span className="text-xs">Notes</span>
+          </button>
+          
+          {activeNote && (
+            <>
+              <button
+                onClick={() => togglePin(activeNote)}
+                className={`mobile-menu-item ${activeNote.is_pinned ? 'active' : ''}`}
+              >
+                <FiMapPin size={20} />
+                <span className="text-xs">Pin</span>
+              </button>
+              
+              <button
+                onClick={handleImageUpload}
+                className="mobile-menu-item"
+              >
+                <FiImage size={20} />
+                <span className="text-xs">Image</span>
+              </button>
+              
+              <button
+                onClick={() => deleteNote(activeNote.id)}
+                className="mobile-menu-item text-[rgb(var(--error))]"
+              >
+                <FiTrash2 size={20} />
+                <span className="text-xs">Delete</span>
+              </button>
+            </>
+          )}
+          
+          <button
+            onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+            className={`mobile-menu-item ${profileMenuOpen ? 'active' : ''}`}
+          >
+            <FiUser size={20} />
+            <span className="text-xs">Profile</span>
+          </button>
+        </nav>
+      </div>
+      
+      {/* Image Uploader Modal */}
+      <AnimatePresence>
+        {showImageUploader && (
+          <ImageUploader
+            onImageUploaded={handleImageUploaded}
+            onCancel={() => setShowImageUploader(false)}
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }
