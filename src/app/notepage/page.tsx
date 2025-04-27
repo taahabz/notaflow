@@ -26,6 +26,7 @@ import {
 } from 'react-icons/fi';
 import { useThemeContext, ThemeType } from '@/contexts/ThemeContext';
 import ImageUploader from './components/ImageUploader';
+import { Theme } from '@/types/theme';
 
 // Custom Editor Component with proper types
 const RichTextEditor = ({ 
@@ -134,17 +135,6 @@ const RichTextEditor = ({
     </div>
   );
 };
-
-// Define theme types
-export enum Theme {
-  LIGHT = 'light',
-  DARK = 'dark',
-  BLUE = 'blue',
-  GREEN = 'green',
-  PURPLE = 'purple',
-  PINK = 'pink',
-  ORANGE = 'orange',
-}
 
 type Note = {
   id: string;
