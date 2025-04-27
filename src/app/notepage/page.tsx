@@ -574,9 +574,28 @@ export default function NotesApp() {
     }
   };
 
-  const handleAvatarUploaded = (url: string) => {
-    setUserProfile(prev => ({ ...prev, avatar_url: url }));
-    setShowAvatarUploader(false);
+  const handleAvatarUploaded = async (url: string) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+
+      // Update profile in Supabase
+      const { error } = await supabase
+        .from('profiles')
+        .update({ avatar_url: url })
+        .eq('user_id', user.id);
+
+      if (error) {
+        console.error('Error updating profile:', error);
+        return;
+      }
+
+      // Update local state
+      setUserProfile(prev => ({ ...prev, avatar_url: url }));
+      setShowAvatarUploader(false);
+    } catch (error) {
+      console.error('Error in handleAvatarUploaded:', error);
+    }
   };
 
   const fetchNotes = async () => {
