@@ -66,14 +66,14 @@ export default function ImageUploader({ onImageUploaded, onCancel }: ImageUpload
       const filePath = `note-images/${fileName}`;
 
       const { error: uploadError } = await supabase.storage
-        .from('notaflow-images')
-        .upload(filePath, file);
+      .from('user-images') // <-- updated
+      .upload(filePath, file);
 
       if (uploadError) throw uploadError;
 
       const { data: { publicUrl } } = supabase.storage
-        .from('notaflow-images')
-        .getPublicUrl(filePath);
+      .from('user-images') // <-- updated
+      .getPublicUrl(filePath);
 
       onImageUploaded(publicUrl);
     } catch (error) {

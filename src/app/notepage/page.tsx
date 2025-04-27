@@ -176,13 +176,13 @@ export default function NotesApp() {
   const { theme, setTheme } = useThemeContext()
   
   const themes = [
-    { value: Theme.LIGHT, label: 'Light', color: { bg: 'rgb(252, 252, 252)', text: 'rgb(28, 28, 30)', accent: 'rgb(225, 185, 40)' } },
-    { value: Theme.DARK, label: 'Dark', color: { bg: 'rgb(20, 20, 24)', text: 'rgb(250, 250, 252)', accent: 'rgb(245, 205, 50)' } },
-    { value: Theme.BLUE, label: 'Blue', color: { bg: 'rgb(248, 252, 255)', text: 'rgb(10, 35, 75)', accent: 'rgb(15, 100, 230)' } },
-    { value: Theme.GREEN, label: 'Green', color: { bg: 'rgb(248, 254, 250)', text: 'rgb(10, 60, 35)', accent: 'rgb(20, 162, 80)' } },
-    { value: Theme.PURPLE, label: 'Purple', color: { bg: 'rgb(252, 250, 255)', text: 'rgb(60, 25, 90)', accent: 'rgb(115, 60, 225)' } },
-    { value: Theme.PINK, label: 'Pink', color: { bg: 'rgb(255, 250, 252)', text: 'rgb(85, 25, 50)', accent: 'rgb(230, 65, 115)' } },
-    { value: Theme.ORANGE, label: 'Orange', color: { bg: 'rgb(255, 252, 250)', text: 'rgb(75, 40, 15)', accent: 'rgb(235, 125, 35)' } },
+    { value: Theme.LIGHT, label: 'Light', color: { bg: 'rgb(252 252 252)', text: 'rgb(28 28 30)', accent: 'rgb(225 185 40)' } },
+    { value: Theme.DARK, label: 'Dark', color: { bg: 'rgb(20 20 24)', text: 'rgb(250 250 252)', accent: 'rgb(245 205 50)' } },
+    { value: Theme.BLUE, label: 'Blue', color: { bg: 'rgb(248 252 255)', text: 'rgb(10 35 75)', accent: 'rgb(15 100 230)' } },
+    { value: Theme.GREEN, label: 'Green', color: { bg: 'rgb(248 254 250)', text: 'rgb(10 60 35)', accent: 'rgb(20 162 80)' } },
+    { value: Theme.PURPLE, label: 'Purple', color: { bg: 'rgb(252 250 255)', text: 'rgb(60 25 90)', accent: 'rgb(115 60 225)' } },
+    { value: Theme.PINK, label: 'Pink', color: { bg: 'rgb(255 250 252)', text: 'rgb(85 25 50)', accent: 'rgb(230 65 115)' } },
+    { value: Theme.ORANGE, label: 'Orange', color: { bg: 'rgb(255 252 250)', text: 'rgb(75 40 15)', accent: 'rgb(235 125 35)' } },
   ]
 
   const [showImageUploader, setShowImageUploader] = useState(false);
@@ -194,7 +194,7 @@ export default function NotesApp() {
       await fetchUserProfile();
 
       const savedTheme = localStorage.getItem('theme');
-      const preferredTheme = savedTheme ? savedTheme as Theme : Theme.LIGHT;
+      const preferredTheme = savedTheme ? savedTheme as ThemeType : Theme.LIGHT;
       updateThemeClass(preferredTheme);
     };
 
@@ -214,7 +214,7 @@ export default function NotesApp() {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  const updateThemeClass = (theme: Theme) => {
+  const updateThemeClass = (theme: ThemeType) => {
     // Remove all theme classes first
     document.documentElement.classList.remove('dark', 'theme-blue', 'theme-green', 'theme-purple', 'theme-pink', 'theme-orange');
     
@@ -299,7 +299,7 @@ export default function NotesApp() {
     }
   };
 
-  const updateTheme = async (selectedTheme: Theme) => {
+  const updateTheme = async (selectedTheme: ThemeType) => {
     try {
       const { data: { user } } = await supabase.auth.getUser();
       if (!user) return;
@@ -311,7 +311,7 @@ export default function NotesApp() {
         .eq('id', user.id);
       
       // Update in context
-      setTheme(selectedTheme as ThemeType);
+      setTheme(selectedTheme);
       
       // Close profile menu
       setProfileMenuOpen(false);
