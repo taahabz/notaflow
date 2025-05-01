@@ -6,11 +6,16 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "next lint"
+    "lint": "next lint",
+    "download-fonts": "node scripts/download-fonts.js",
+    "copy-fonts": "node scripts/copy-fonts.js",
+    "migrate": "node scripts/run-migrations.js",
+    "setup": "npm run download-fonts && npm run copy-fonts && npm run migrate"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.49.4",
     "browser-image-compression": "^2.0.2",
+    "dotenv": "^16.4.5",
     "framer-motion": "^12.7.3",
     "next": "15.3.0",
     "react": "^19.0.0",

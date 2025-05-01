@@ -10,6 +10,7 @@ A sleek, modern note-taking application inspired by Apple Notes, built with Next
 - 💫 Rich Text Editing: Custom-built editor with support for formatting
 - 📱 Responsive Design: Optimized for desktop, tablet, and mobile devices
 - 🎨 Theme System: Multiple color themes with dark/light mode support
+- 🖋️ Font Selection: Choose from multiple beautiful typefaces
 - 🖼️ Image Support: Drag-and-drop image uploads with cloud storage
 - 📌 Note Organization: Pin important notes and real-time search
 - ⚡ Real-time Autosave: Changes are saved automatically as you type
@@ -79,19 +80,40 @@ npm install
 
 3. Set up your environment variables (refer to `.env.example`).
 
-4. Run the development server:
+4. Download fonts and set up the database:
+
+```
+npm run setup
+```
+
+5. Run the development server:
 
 ```
 npm run dev
 ```
 
-5. Open [http://localhost:3000](http://localhost:3000) in your browser.
+6. Open [http://localhost:3000](http://localhost:3000) in your browser.
+
+---
+
+## Font Selection Feature
+
+Notaflow includes a beautiful selection of fonts to personalize your note-taking experience:
+
+- **System Font**: The default system font for a native experience
+- **Cascadia Mono**: A monospaced font designed by Aaron Bell for Microsoft
+- **Roboto Slab**: A slab serif font designed by Christian Robertson
+- **Hubot Sans**: A clean sans-serif designed by Tobias Bjerrome Ahlin for GitHub
+- **Rowdies**: A rounded display font designed by Jaikishan Patel
+
+Your selected font is applied consistently across the entire app and saved to your user profile.
 
 ---
 
 ## Recent Improvements
 
 - **Enhanced Theme System**: Added a robust theme context with persistent preferences
+- **Font Selection**: Added multiple font options for personalized experience
 - **Mobile-Optimized Interface**: Completely redesigned the mobile experience
 - **Apple-like Design**: Refined styling to closely match Apple's aesthetic
 - **Custom Editor**: Replaced ReactQuill with a native contentEditable editor

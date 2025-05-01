@@ -22,12 +22,16 @@ import {
   FiBold,
   FiItalic,
   FiList,
-  FiLink
+  FiLink,
+  FiType
 } from 'react-icons/fi';
 import { useThemeContext, ThemeType } from '@/contexts/ThemeContext';
+import { useFontContext, FontType } from '@/contexts/FontContext';
 import ImageUploader from './components/ImageUploader';
 import AvatarUploader from './components/AvatarUploader';
+import Header from './components/Header';
 import { Theme } from '@/types/theme';
+import { Font } from '@/types/font';
 
 // Custom Editor Component with proper types
 const RichTextEditor = ({ 
@@ -151,6 +155,7 @@ type Note = {
 type Profile = {
   avatar_url: string | null;
   theme: Theme;
+  font: Font;
 };
 
 export default function NotesApp() {
@@ -164,13 +169,15 @@ export default function NotesApp() {
   const [profileMenuOpen, setProfileMenuOpen] = useState(false);
   const [userProfile, setUserProfile] = useState<Profile>({ 
     avatar_url: null, 
-    theme: Theme.LIGHT 
+    theme: Theme.LIGHT,
+    font: Font.SYSTEM 
   });
   
   // Reference to the current active editor element for image insertion
   const editorRef = useRef<HTMLDivElement | null>(null);
 
-  const { theme, setTheme } = useThemeContext()
+  const { theme, setTheme } = useThemeContext();
+  const { font, setFont } = useFontContext();
   
   const themes = [
     { value: Theme.LIGHT, label: 'Light', color: { bg: 'rgb(252 252 252)', text: 'rgb(28 28 30)', accent: 'rgb(225 185 40)' } },
@@ -180,7 +187,15 @@ export default function NotesApp() {
     { value: Theme.PURPLE, label: 'Purple', color: { bg: 'rgb(252 250 255)', text: 'rgb(60 25 90)', accent: 'rgb(115 60 225)' } },
     { value: Theme.PINK, label: 'Pink', color: { bg: 'rgb(255 250 252)', text: 'rgb(85 25 50)', accent: 'rgb(230 65 115)' } },
     { value: Theme.ORANGE, label: 'Orange', color: { bg: 'rgb(255 252 250)', text: 'rgb(75 40 15)', accent: 'rgb(235 125 35)' } },
-  ]
+  ];
+
+  const fonts = [
+    { value: Font.SYSTEM, label: 'System Font', family: 'system-ui' },
+    { value: Font.CASCADIA_MONO, label: 'Cascadia Mono', family: '"Cascadia Mono", monospace' },
+    { value: Font.ROBOTO_SLAB, label: 'Roboto Slab', family: '"Roboto Slab", serif' },
+    { value: Font.HUBOT_SANS, label: 'Hubot Sans', family: '"Hubot Sans", sans-serif' },
+    { value: Font.ROWDIES, label: 'Rowdies', family: '"Rowdies", sans-serif' },
+  ];
 
   const [showImageUploader, setShowImageUploader] = useState(false);
   const [showAvatarUploader, setShowAvatarUploader] = useState(false);
@@ -417,6 +432,10 @@ export default function NotesApp() {
       const savedTheme = localStorage.getItem('theme');
       const preferredTheme = savedTheme ? savedTheme as ThemeType : Theme.LIGHT;
       updateThemeClass(preferredTheme);
+      
+      const savedFont = localStorage.getItem('font');
+      const preferredFont = savedFont ? savedFont as FontType : Font.SYSTEM;
+      setFont(preferredFont);
     };
 
     initializeApp();
@@ -473,48 +492,59 @@ export default function NotesApp() {
       // First try to fetch the profile
       const { data, error } = await supabase
         .from('profiles')
-        .select('avatar_url, theme')
+        .select('avatar_url, theme, font')
         .eq('user_id', user.id)
         .single();
   
-      if (error && error.code !== 'PGRST116') { // PGRST116 = no rows found
-        console.error('Error fetching profile:', error);
-        return;
-      }
-  
-      // If profile doesn't exist, create it
-      if (!data) {
-        const { error: createError } = await supabase
-          .from('profiles')
-          .insert({
-            user_id: user.id,
-            theme: Theme.LIGHT,
-            avatar_url: null
-          })
-          .select()
-          .single();
-  
-        if (createError) {
-          console.error('Error creating profile:', createError);
-          return;
+      if (error) {
+        if (error.code !== 'PGRST116') { // PGRST116 = no rows found
+          console.error('Error fetching profile:', error);
         }
-  
-        // Refetch the newly created profile
-        const { data: newProfile } = await supabase
-          .from('profiles')
-          .select('avatar_url, theme')
-          .eq('user_id', user.id)
-          .single();
-  
-        setUserProfile(newProfile || { avatar_url: null, theme: Theme.LIGHT });
+        
+        // If profile doesn't exist, create it
+        if (error.code === 'PGRST116') {
+          const { error: createError } = await supabase
+            .from('profiles')
+            .insert({
+              user_id: user.id,
+              theme: Theme.LIGHT,
+              font: Font.SYSTEM,
+              avatar_url: null
+            });
+    
+          if (createError) {
+            console.error('Error creating profile:', createError);
+            return;
+          }
+    
+          // Refetch the newly created profile
+          const { data: newProfile, error: refetchError } = await supabase
+            .from('profiles')
+            .select('avatar_url, theme, font')
+            .eq('user_id', user.id)
+            .single();
+    
+          if (refetchError) {
+            console.error('Error refetching profile:', refetchError);
+            return;
+          }
+    
+          setUserProfile(newProfile || { avatar_url: null, theme: Theme.LIGHT, font: Font.SYSTEM });
+        }
+        
+        return;
       } else {
         setUserProfile(data);
       }
   
-      // Apply theme
+      // Apply theme and font
       const theme = data?.theme || Theme.LIGHT;
       updateThemeClass(theme);
       localStorage.setItem('theme', theme);
+      
+      const font = data?.font || Font.SYSTEM;
+      setFont(font as FontType);
+      localStorage.setItem('font', font);
     } catch (err) {
       console.error('Unexpected error in fetchUserProfile:', err);
     }
@@ -526,10 +556,15 @@ export default function NotesApp() {
       if (!user) return;
       
       // Update in database
-      await supabase
+      const { error } = await supabase
         .from('profiles')
         .update({ theme: selectedTheme })
-        .eq('id', user.id);
+        .eq('user_id', user.id);
+      
+      if (error) {
+        console.error('Error updating theme:', error);
+        return;
+      }
       
       // Update in context
       setTheme(selectedTheme);
@@ -542,35 +577,42 @@ export default function NotesApp() {
   };
 
   const handleAvatarUpload = async (file: File) => {
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) return;
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
 
-    const fileExt = file.name.split('.').pop();
-    const fileName = `${user.id}-${Date.now()}.${fileExt}`;
-    const filePath = `${fileName}`;
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${user.id}-${Date.now()}.${fileExt}`;
+      const filePath = `${fileName}`;
 
-    // Upload new avatar
-    const { error: uploadError } = await supabase.storage
-      .from('avatars')
-      .upload(filePath, file);
+      // Upload new avatar
+      const { error: uploadError } = await supabase.storage
+        .from('avatars')
+        .upload(filePath, file);
 
-    if (uploadError) {
-      console.error('Avatar upload error:', uploadError);
-      return;
-    }
+      if (uploadError) {
+        console.error('Avatar upload error:', uploadError);
+        return;
+      }
 
-    const { data: { publicUrl } } = supabase.storage
-      .from('avatars')
-      .getPublicUrl(filePath);
+      const { data: { publicUrl } } = supabase.storage
+        .from('avatars')
+        .getPublicUrl(filePath);
 
-    // Update profile
-    const { error: updateError } = await supabase
-      .from('profiles')
-      .update({ avatar_url: publicUrl })
-      .eq('user_id', user.id);
+      // Update profile
+      const { error: updateError } = await supabase
+        .from('profiles')
+        .update({ avatar_url: publicUrl })
+        .eq('user_id', user.id);
 
-    if (!updateError) {
+      if (updateError) {
+        console.error('Error updating avatar:', updateError);
+        return;
+      }
+      
       setUserProfile(prev => ({ ...prev, avatar_url: publicUrl }));
+    } catch (error) {
+      console.error('Error in handleAvatarUpload:', error);
     }
   };
 
@@ -792,7 +834,7 @@ export default function NotesApp() {
 
   const ThemeSelector = () => {
     return (
-      <div className="theme-selector flex flex-col bg-[rgb(var(--card))] border border-[rgb(var(--border))] rounded-lg p-3 shadow-md">
+      <div className="theme-selector flex flex-col bg-[rgb(var(--card))] border border-[rgb(var(--border))] rounded-lg p-3 shadow-md mb-3">
         <h3 className="text-sm font-medium mb-3 text-[rgb(var(--foreground))]">Color Theme</h3>
         <div className="grid grid-cols-3 gap-2 sm:grid-cols-4 md:flex md:flex-wrap">
           {themes.map((t) => (
@@ -819,6 +861,64 @@ export default function NotesApp() {
               </span>
               {theme === t.value && (
                 <div className="absolute -top-1 -right-1 w-4 h-4 bg-[rgb(var(--accent))] rounded-full flex items-center justify-center">
+                  <FiCheck size={10} className="text-white" />
+                </div>
+              )}
+            </button>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  // Update font function
+  const updateFont = async (selectedFont: FontType) => {
+    try {
+      const { data: { user } } = await supabase.auth.getUser();
+      if (!user) return;
+      
+      // Update in database
+      const { error } = await supabase
+        .from('profiles')
+        .update({ font: selectedFont })
+        .eq('user_id', user.id);
+      
+      if (error) {
+        console.error('Error updating font:', error);
+        return;
+      }
+      
+      // Update in context
+      setFont(selectedFont);
+      
+      // Close profile menu
+      setProfileMenuOpen(false);
+    } catch (error) {
+      console.error('Error updating font:', error);
+    }
+  };
+
+  const FontSelector = () => {
+    return (
+      <div className="font-selector flex flex-col bg-[rgb(var(--card))] border border-[rgb(var(--border))] rounded-lg p-3 shadow-md">
+        <h3 className="text-sm font-medium mb-3 text-[rgb(var(--foreground))]">Font Family</h3>
+        <div className="flex flex-col gap-2">
+          {fonts.map((f) => (
+            <button
+              key={f.value}
+              onClick={() => updateFont(f.value as FontType)}
+              className={`relative text-left p-3 rounded-md transition-all hover:bg-[rgb(var(--secondary-hover))] ${
+                font === f.value ? 'bg-[rgb(var(--secondary))] ring-1 ring-[rgb(var(--accent))]' : ''
+              }`}
+              style={{
+                fontFamily: f.family
+              }}
+            >
+              <span className="text-base">
+                {f.label}
+              </span>
+              {font === f.value && (
+                <div className="absolute top-3 right-3 w-4 h-4 bg-[rgb(var(--accent))] rounded-full flex items-center justify-center">
                   <FiCheck size={10} className="text-white" />
                 </div>
               )}
@@ -911,96 +1011,82 @@ export default function NotesApp() {
   return (
     <div className="flex flex-col h-screen bg-[rgb(var(--background))] text-[rgb(var(--foreground))] transition-colors duration-200">
       {/* Header */}
-      <header className="flex items-center justify-between p-3 md:p-4 border-b border-[rgb(var(--border))] bg-[rgb(var(--card))]">
-        <div className="flex items-center">
+      <Header 
+        sidebarOpen={sidebarOpen} 
+        setSidebarOpen={setSidebarOpen} 
+        onImageUpload={handleImageUpload}
+        activeNote={!!activeNote}
+      />
+      
+      {/* Profile menu */}
+      <div className="fixed top-3 md:top-4 right-3 md:right-4 z-50">
+        <div className="relative">
           <button
-            onClick={() => setSidebarOpen(!sidebarOpen)}
-            className="p-2 rounded-full hover:bg-[rgb(var(--secondary))] mr-2 md:mr-4"
-            aria-label="Toggle sidebar"
+            ref={profileButtonRef}
+            onClick={() => setProfileMenuOpen(!profileMenuOpen)}
+            className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-[rgb(var(--secondary))]"
+            aria-label="Profile menu"
           >
-            {sidebarOpen ? <FiX /> : <FiMenu />}
+            {userProfile.avatar_url ? (
+              <img 
+                src={`${userProfile.avatar_url}?t=${new Date().getTime()}`} 
+                alt="User Avatar" 
+                className="w-8 h-8 rounded-full object-cover"
+              />
+            ) : (
+              <FiUser />
+            )}
           </button>
-          <h1 className="font-semibold text-lg md:text-xl">Notaflow</h1>
-        </div>
-        
-        <div className="flex items-center space-x-2">
-          {activeNote && (
-            <button
-              onClick={handleImageUpload}
-              className="p-2 rounded-full hover:bg-[rgb(var(--secondary))] text-[rgb(var(--foreground))]"
-              aria-label="Upload image"
-            >
-              <FiImage />
-            </button>
-          )}
           
-          <div className="relative">
-            <button
-              ref={profileButtonRef}
-              onClick={() => setProfileMenuOpen(!profileMenuOpen)}
-              className="flex items-center justify-center w-9 h-9 rounded-full hover:bg-[rgb(var(--secondary))]"
-              aria-label="Profile menu"
-            >
-              {userProfile.avatar_url ? (
-                <img 
-                  src={`${userProfile.avatar_url}?t=${new Date().getTime()}`} 
-                  alt="User Avatar" 
-                  className="w-8 h-8 rounded-full object-cover"
-                />
-              ) : (
-                <FiUser />
-              )}
-            </button>
-            
-            <AnimatePresence>
-              {profileMenuOpen && (
-                <motion.div
-                  ref={profileMenuRef}
-                  initial={{ opacity: 0, y: -10 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -10 }}
-                  className="absolute right-0 mt-2 w-64 rounded-lg shadow-lg py-1 bg-[rgb(var(--card))] border border-[rgb(var(--border))] z-10"
-                >
-                  <div className="p-3 border-b border-[rgb(var(--border))]">
-                    <div className="flex justify-center mb-3">
-                      <button
-                        onClick={() => {
-                          setShowAvatarUploader(true);
-                          setProfileMenuOpen(false);
-                        }}
-                        className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-[rgb(var(--accent))] hover:opacity-90 transition-opacity"
-                      >
-                        {userProfile.avatar_url ? (
-                          <img 
-                            src={userProfile.avatar_url} 
-                            alt="User Avatar" 
-                            className="w-full h-full object-cover"
-                          />
-                        ) : (
-                          <div className="w-full h-full flex items-center justify-center bg-[rgb(var(--secondary))]">
-                            <FiUser size={28} />
-                          </div>
-                        )}
-                        <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 opacity-0 hover:opacity-100 transition-opacity">
-                          <FiUpload color="white" />
+          <AnimatePresence>
+            {profileMenuOpen && (
+              <motion.div
+                ref={profileMenuRef}
+                initial={{ opacity: 0, y: -10 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: -10 }}
+                className="absolute right-0 mt-2 w-72 rounded-lg shadow-lg py-1 bg-[rgb(var(--card))] border border-[rgb(var(--border))] z-10 max-h-[80vh] overflow-y-auto"
+              >
+                <div className="p-3 border-b border-[rgb(var(--border))]">
+                  <div className="flex justify-center mb-3">
+                    <button
+                      onClick={() => {
+                        setShowAvatarUploader(true);
+                        setProfileMenuOpen(false);
+                      }}
+                      className="relative w-16 h-16 rounded-full overflow-hidden border-2 border-[rgb(var(--accent))] hover:opacity-90 transition-opacity"
+                    >
+                      {userProfile.avatar_url ? (
+                        <img 
+                          src={userProfile.avatar_url} 
+                          alt="User Avatar" 
+                          className="w-full h-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-full h-full flex items-center justify-center bg-[rgb(var(--secondary))]">
+                          <FiUser size={28} />
                         </div>
-                      </button>
-                    </div>
-                    <ThemeSelector />
+                      )}
+                      <div className="absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 opacity-0 hover:opacity-100 transition-opacity">
+                        <FiUpload color="white" />
+                      </div>
+                    </button>
                   </div>
-                  
-                  <button
-                    onClick={handleLogout}
-                    className="flex w-full items-center px-4 py-2 text-left hover:bg-[rgb(var(--secondary))] text-[rgb(var(--foreground))]"
-                  >
-                    <FiLogOut className="mr-3" /> Sign Out
-                  </button>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </div>
+                  <ThemeSelector />
+                  <FontSelector />
+                </div>
+                
+                <button
+                  onClick={handleLogout}
+                  className="flex w-full items-center px-4 py-2 text-left hover:bg-[rgb(var(--secondary))] text-[rgb(var(--foreground))]"
+                >
+                  <FiLogOut className="mr-3" /> Sign Out
+                </button>
+              </motion.div>
+            )}
+          </AnimatePresence>
         </div>
-      </header>
+      </div>
       
       {/* Main Content */}
       <div className="flex flex-1 overflow-hidden">
