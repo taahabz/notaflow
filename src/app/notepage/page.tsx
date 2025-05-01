@@ -222,8 +222,16 @@ export default function NotesApp() {
       for(let i = 0; i < text.length; i++) {
         result += String.fromCharCode(text.charCodeAt(i) ^ key.charCodeAt(i % key.length));
       }
-      // Convert to base64 for safe storage
-      return btoa(result);
+      
+      // Use TextEncoder and TextDecoder for proper Unicode handling
+      // First convert to UTF-8 bytes
+      const encoder = new TextEncoder();
+      const bytes = encoder.encode(result);
+      
+      // Convert bytes to base64 for safe storage - handle binary data properly
+      return btoa([...new Uint8Array(bytes)]
+        .map(byte => String.fromCharCode(byte))
+        .join(''));
     } catch (error) {
       console.error('Encryption error:', error);
       return text;
@@ -238,14 +246,22 @@ export default function NotesApp() {
         return encryptedText;
       }
       
-      // Decode from base64
-      const decoded = atob(encryptedText);
+      // Decode from base64 to byte array
+      const binaryString = atob(encryptedText);
+      const bytes = new Uint8Array(binaryString.length);
+      for (let i = 0; i < binaryString.length; i++) {
+        bytes[i] = binaryString.charCodeAt(i);
+      }
+      
+      // Convert bytes back to string
+      const decoder = new TextDecoder();
+      const decodedText = decoder.decode(bytes);
       
       // Reverse the XOR cipher
       const key = 'SIMPLE_KEY';
       let result = '';
-      for(let i = 0; i < decoded.length; i++) {
-        result += String.fromCharCode(decoded.charCodeAt(i) ^ key.charCodeAt(i % key.length));
+      for(let i = 0; i < decodedText.length; i++) {
+        result += String.fromCharCode(decodedText.charCodeAt(i) ^ key.charCodeAt(i % key.length));
       }
       return result;
     } catch (error) {

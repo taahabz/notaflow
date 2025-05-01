@@ -12,6 +12,17 @@ export default function SignupPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [appTitle, setAppTitle] = useState('Notaflow');
+
+  useEffect(() => {
+    // Load title from localStorage
+    const savedTitle = localStorage.getItem('header_title');
+    if (savedTitle) {
+      setAppTitle(savedTitle);
+      // Also update the document title
+      document.title = savedTitle;
+    }
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -70,7 +81,7 @@ export default function SignupPage() {
             transition={{ delay: 0.2 }}
             className="text-2xl font-bold text-center text-[rgb(var(--foreground))] mb-6"
           >
-            Join Notaflow
+            {appTitle}
           </motion.h1>
 
           <motion.form 

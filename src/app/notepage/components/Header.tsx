@@ -23,6 +23,11 @@ export default function Header({ sidebarOpen, setSidebarOpen, onImageUpload, act
     }
   }, []);
 
+  // Update document title when header title changes
+  useEffect(() => {
+    document.title = title;
+  }, [title]);
+
   // Focus the input when editing starts
   useEffect(() => {
     if (isEditing && titleInputRef.current) {
@@ -48,6 +53,8 @@ export default function Header({ sidebarOpen, setSidebarOpen, onImageUpload, act
     
     // Save to localStorage
     localStorage.setItem('header_title', title);
+    // Update the document title to match
+    document.title = title;
     setIsEditing(false);
   };
 

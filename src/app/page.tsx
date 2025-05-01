@@ -9,12 +9,23 @@ import { FiEdit3, FiCalendar, FiUsers, FiArrowRight, FiMenu, FiX, FiLock, FiShie
 export default function Home() {
   const router = useRouter();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [appTitle, setAppTitle] = useState('Notaflow');
   const { scrollYProgress } = useScroll();
   const scaleX = useSpring(scrollYProgress, {
     stiffness: 100,
     damping: 30,
     restDelta: 0.001
   });
+
+  useEffect(() => {
+    // Load title from localStorage
+    const savedTitle = localStorage.getItem('header_title');
+    if (savedTitle) {
+      setAppTitle(savedTitle);
+      // Also update the document title
+      document.title = savedTitle;
+    }
+  }, []);
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data: { session } }) => {
@@ -71,7 +82,9 @@ export default function Home() {
           transition={{ duration: 0.5, ease: "easeOut" }}
           className="flex items-center"
         >
-          <span className="text-xl font-medium text-amber-600">Notaflow</span>
+          <span className="text-xl font-medium text-amber-600">
+            {appTitle}
+          </span>
         </motion.div>
         
         {/* Desktop Nav */}
