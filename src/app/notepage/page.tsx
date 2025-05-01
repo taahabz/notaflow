@@ -1266,18 +1266,7 @@ export default function NotesApp() {
       </div>
       
       {/* Save notification */}
-      <AnimatePresence>
-        {showSaveNotification && (
-          <motion.div
-            initial={{ opacity: 0, y: 50 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: 50 }}
-            className="fixed bottom-4 right-4 bg-[rgb(var(--success))] text-white px-4 py-2 rounded-md shadow-lg"
-          >
-            Note saved!
-          </motion.div>
-        )}
-      </AnimatePresence>
+ 
       
       {/* Mobile floating action button */}
       <div className="md:hidden">
